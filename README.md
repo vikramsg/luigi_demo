@@ -8,6 +8,17 @@
 
 ## Run
 
+### Using local scheduler
+
 ```
-PYTHONPATH='.' luigi --module demo WordCount  --local-scheduler --date-interval 2012-06
+PYTHONPATH='.' luigi --module demo AggregateArtists --local-scheduler --date-interval 2012-06
 ```
+
+### Using locally hosted central scheduler
+
+```
+luigid
+PYTHONPATH='.' luigi --module demo AggregateArtists  --date-interval 2012-06
+```
+
+View task status on the [Dashboard](http://localhost:8082). 

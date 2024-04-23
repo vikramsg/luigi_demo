@@ -1,36 +1,44 @@
+import random
+from collections import defaultdict
+
 import luigi
 
 
-class InputText(luigi.ExternalTask):
+class Streams(luigi.Task):
     """
-    This class represents something that was created elsewhere by an external process,
-    so all we want to do is to implement the output method.
+    Faked version right now, just generates bogus data.
     """
     date = luigi.DateParameter()
+
+    def run(self):
+        """
+        Generates bogus data and writes it into the :py:meth:`~.Streams.output` target.
+        """
+        with self.output().open('w') as output:
+            for _ in range(1000):
+                output.write('{} {} {}\n'.format(
+                    random.randint(0, 999),
+                    random.randint(0, 999),
+                    random.randint(0, 999)))
 
     def output(self):
         """
         Returns the target output for this task.
-        In this case, it expects a file to be present in the local file system.
+        In this case, a successful execution of this task will create a file in the local file system.
 
         :return: the target output for this task.
         :rtype: object (:py:class:`luigi.target.Target`)
         """
-        return luigi.LocalTarget(self.date.strftime('/var/tmp/text/%Y-%m-%d.txt'))
+        return luigi.LocalTarget(self.date.strftime('data/streams_%Y_%m_%d_faked.tsv'))
 
 
-class WordCount(luigi.Task):
+class AggregateArtists(luigi.Task):
+    """
+    This task runs over the target data returned by :py:meth:`~/.Streams.output` and
+    writes the result into its :py:meth:`~.AggregateArtists.output` target (local file).
+    """
+
     date_interval = luigi.DateIntervalParameter()
-
-    def requires(self):
-        """
-        This task's dependencies:
-
-        * :py:class:`~.InputText`
-
-        :return: list of object (:py:class:`luigi.task.Task`)
-        """
-        return [InputText(date) for date in self.date_interval.dates()]
 
     def output(self):
         """
@@ -40,23 +48,27 @@ class WordCount(luigi.Task):
         :return: the target output for this task.
         :rtype: object (:py:class:`luigi.target.Target`)
         """
-        return luigi.LocalTarget('/var/tmp/text-count/%s' % self.date_interval)
+        return luigi.LocalTarget("data/artist_streams_{}.tsv".format(self.date_interval))
+
+    def requires(self):
+        """
+        This task's dependencies:
+
+        * :py:class:`~.Streams`
+
+        :return: list of object (:py:class:`luigi.task.Task`)
+        """
+        return [Streams(date) for date in self.date_interval]
 
     def run(self):
-        """
-        1. count the words for each of the :py:meth:`~.InputText.output` targets created by :py:class:`~.InputText`
-        2. write the count into the :py:meth:`~.WordCount.output` target
-        """
-        count = {}
+        artist_count = defaultdict(int)
 
-        # NOTE: self.input() actually returns an element for the InputText.output() target
-        for f in self.input():  # The input() method is a wrapper around requires() that returns Target objects
-            for line in f.open('r'):  # Target objects are a file system/format abstraction and this will return a file stream object
-                for word in line.strip().split():
-                    count[word] = count.get(word, 0) + 1
+        for t in self.input():
+            with t.open('r') as in_file:
+                for line in in_file:
+                    _, artist, track = line.strip().split()
+                    artist_count[artist] += 1
 
-        # output data
-        f = self.output().open('w')
-        for word, count in count.items():
-            f.write("%s\t%d\n" % (word, count))
-        f.close()  # WARNING: file system operations are atomic therefore if you don't close the file you lose all data
+        with self.output().open('w') as out_file:
+            for artist, count in artist_count.items():
+                out_file.write('{}\t{}\n'.format(artist, count))
